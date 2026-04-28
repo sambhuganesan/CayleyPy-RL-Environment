@@ -2,13 +2,35 @@ out
 
 env_data/**
 !env_data/.gitkeep
+!env_data/cayleypy_review/
+!env_data/cayleypy_review/paper/
+!env_data/cayleypy_review/paper/cayleypy.pdf
+!env_data/cayleypy_review/generators/
+!env_data/cayleypy_review/generators/p054.json
+!env_data/cayleypy_review/targets/
+!env_data/cayleypy_review/targets/p054-t000.pt
+!env_data/cayleypy_review/datasets/
+!env_data/cayleypy_review/datasets/p054-t000-deepcubeahard.pt
+!env_data/cayleypy_review/pilgrim/
+!env_data/cayleypy_review/pilgrim/__init__.py
+!env_data/cayleypy_review/pilgrim/model.py
+!env_data/cayleypy_review/pilgrim/searcher.py
+!env_data/cayleypy_review/pilgrim/trainer.py
+!env_data/cayleypy_review/pilgrim/utils.py
+!env_data/cayleypy_review/train.py
+!env_data/cayleypy_review/test.py
+env_data/cayleypy_review/logs/
+env_data/cayleypy_review/weights/
+env_data/cayleypy_review/forest/
 
 scoring_data/**
 !scoring_data/.gitkeep
+!scoring_data/cayleypy_review/
+!scoring_data/cayleypy_review/score_cayleypy.py
+!scoring_data/cayleypy_review/expected_hashes.json
+!scoring_data/cayleypy_review/deepcubeahard_optimal.json
 
 run_config*.json
-
-!scoring_data/cayleypy_review/deepcubeahard_optimal.json
 
 ## Everything below is from https://raw.githubusercontent.com/github/gitignore/refs/heads/main/Python.gitignore
 # Byte-compiled / optimized / DLL files

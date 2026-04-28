@@ -1,0 +1,21 @@
+{
+    "optimal_lengths": [
+        20,
+        20,
+        20,
+        21,
+        20,
+        20,
+        20,
+        20,
+        19,
+        20,
+        20,
+        19,
+        21,
+        20,
+        20,
+        20
+    ],
+    "source": "CayleyPy paper README, deepcubeahard subset"
+}
