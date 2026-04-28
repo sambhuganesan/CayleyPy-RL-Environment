@@ -189,7 +189,7 @@ def get_container_run_command(
 
     # Mount NVIDIA GPU devices using CDI (Container Device Interface)
     # Only mount if task requires GPU hardware
-    if task.required_hardware.startswith("h100-") and Path("/dev/nvidia0").exists():
+    if task.required_hardware.startswith("h100") and Path("/dev/nvidia0").exists():
         command.extend(["--device", "nvidia.com/gpu=all"])
 
     # Mount TPU devices which are exposed as /dev/vfio/[0-9]

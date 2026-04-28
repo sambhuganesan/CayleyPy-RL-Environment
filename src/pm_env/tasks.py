@@ -110,6 +110,13 @@ def get_tasks(config: EvaluationRunConfig) -> list[Task]:
                     training run yourself. Focus your time on diagnosing and fixing the issues
                     rather than waiting on training cycles.
 
+                    LOCAL VS JUDGE BUDGET:
+                    On GPU, the judge uses the full search budget described above, including
+                    `--num_steps 200`. On CPU-only fallback runs, the judge reduces some search
+                    settings for feasibility, including a smaller step budget. Do not treat that
+                    smaller CPU fallback as the target configuration; the intended evaluation
+                    regime is the GPU configuration.
+
                     BASH NOTES:
                     Bash commands have a 300-second timeout. For long-running commands, redirect
                     to a log file and run in the background:
