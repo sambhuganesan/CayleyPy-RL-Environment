@@ -132,6 +132,12 @@ and makes Witness 4 inconclusive.
 
 ## Calibration
 
+The quantities below mean:
+- `solve_rate`: fraction of scrambles solved
+- `mean_optimality`: average of `optimal_length / solution_length` over solved scrambles
+- `solver_score`: `solve_rate * mean_optimality`
+- `final_score`: `0.3 * structural_score + 0.7 * solver_score`
+
 ### CPU pilot (4 epochs, beam width 1024, 4 scrambles)
 
 | Configuration | Solved | Avg length | Optimality | Solver score |
@@ -139,13 +145,15 @@ and makes Witness 4 inconclusive.
 | Buggy code | 3/4 (75%) | 38.0 | 0.53 | 0.40 |
 | Clean code | 4/4 (100%) | 32.25 | 0.62 | 0.62 |
 
-This pilot confirmed the gradient direction: clean code produced shorter
-solutions and higher solve rate on the same scrambles. Bug 4 cannot be
-meaningfully exercised on CPU.
+This pilot confirmed the direction of the benchmark signal under a small
+CPU-only setting: the clean implementation solved more scrambles and produced
+shorter solutions on the same sample. Bug 4 cannot be meaningfully exercised
+on CPU, so this pilot only probes part of the full task.
 
 ### Full Stage 2 against buggy code
 
-Using the CPU-local evaluation setting with 16 scrambles:
+Using the CPU-local evaluation setting with 16 scrambles, the buggy code
+produced:
 
 ```text
 solve_rate 0.750
@@ -155,12 +163,14 @@ structural_score 0.000
 final_score 0.311
 ```
 
-This is the floor: an agent that fixes nothing scores about `0.311`.
+This is the observed local floor for an agent that fixes nothing: about
+`0.311` final score under the CPU fallback regime.
 
 ### End-to-end test with `claude-haiku-4-5` as agent
 
 After adding `pdftotext` support to the container and explicitly instructing
-the agent to inspect the paper first, Claude Haiku produced:
+the agent to inspect the paper first, Claude Haiku produced the following
+CPU-local result:
 
 ```text
 bug1_skip_connection PASS
@@ -175,8 +185,8 @@ structural_score 0.075
 final_score 0.310
 ```
 
-In an earlier run before the prompt and PDF-access improvements, the same
-model reached:
+For comparison, an earlier run before the prompt and PDF-access improvements
+reached:
 
 ```text
 solve_rate 0.750
@@ -189,23 +199,12 @@ final_score 0.349
 The important qualitative result is that the model now definitely reads the
 paper, but still misses the prose-level bugs in Sections IV.B and IV.C.
 That makes the failure more interpretable: it is no longer explained by
-missing PDF tooling.
-
-### Estimated clean ceiling on H100
-
-Not yet validated end-to-end on GPU. Extrapolating from the CPU calibration
-and the paper's reported numbers, clean code at 128 epochs with beam width
-`2^18` should produce roughly:
-
-```text
-solve_rate ~0.95-1.00
-mean_optimality ~0.90-0.95
-solver_score ~0.85-0.95
-structural_score 0.30
-final_score ~0.69-0.77
-```
-
-Real H100 evaluation hardware will determine the final ceiling.
+missing PDF tooling. The lower numerical score in the paper-reading run does
+not imply that paper access hurts performance; under the reduced CPU-local
+regime, small changes in search behavior can move the score noticeably. The
+main benefit of the paper-access change is that the failure is now easier to
+interpret, because the model no longer has the excuse that it could not read
+the reference document.
 
 ## Design choices
 
@@ -239,12 +238,6 @@ The task depends on reading `paper/cayleypy.pdf`. The container installs
 inside the agent environment instead of relying on host-only tools.
 
 ## Known limitations
-
-**Witness 4 uses source inspection.**
-A fully behavioral fp16 witness would require running `test.py` on a known
-state and intercepting the forward pass to verify inference dtype. That is
-more expensive than the current source-level check. The present witness looks
-for `.half()` or `torch.float16` in `test.py`.
 
 **Calibration is CPU-heavy so far.**
 End-to-end validation on H100 has not been performed locally. The GPU numbers
