@@ -8,6 +8,8 @@ scoring_data/**
 
 run_config*.json
 
+!scoring_data/cayleypy_review/deepcubeahard_optimal.json
+
 ## Everything below is from https://raw.githubusercontent.com/github/gitignore/refs/heads/main/Python.gitignore
 # Byte-compiled / optimized / DLL files
 __pycache__/

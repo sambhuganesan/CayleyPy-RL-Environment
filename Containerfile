@@ -16,6 +16,8 @@ RUN \
     shadow-utils \
     # Provides `find`
     findutils \
+    # Provides `pdftotext` for reading local papers inside the task environment
+    poppler-utils \
     which \
     # Allows setting up firewall so model user can't access network
     iptables \

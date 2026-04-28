@@ -18,6 +18,10 @@ dependencies = [
     "pymongo>=4.14.1",
     "textual>=6.2.1",
     "anthropic>=0.75.0",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+    "pandas>=3.0.2",
+    "tqdm>=4.67.1",
 ]
 
 [project.scripts]
