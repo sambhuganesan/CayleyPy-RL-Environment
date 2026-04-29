@@ -146,18 +146,6 @@ figures below were collected before the final deterministic-seeding and
 model-dependence updates and should be rerun for exact like-for-like
 comparison.
 
-### CPU pilot (4 epochs, beam width 1024, 4 scrambles)
-
-| Configuration | Solved | Avg length | Optimality | Solver score |
-|---|---:|---:|---:|---:|
-| Buggy code | 3/4 (75%) | 38.0 | 0.53 | 0.40 |
-| Clean code | 4/4 (100%) | 32.25 | 0.62 | 0.62 |
-
-This pilot confirmed the direction of the benchmark signal under a small
-CPU-only setting: the clean implementation solved more scrambles and produced
-shorter solutions on the same sample. Bug 4 cannot be meaningfully exercised
-on CPU, so this pilot only probes part of the full task.
-
 ### Full Stage 2 against buggy code
 
 Using the CPU-local evaluation setting with 16 scrambles, the buggy code
@@ -239,6 +227,33 @@ judge result. This is another sign that the reduced CPU regime is a noisy
 proxy: the benchmark currently shows a clear structural gradient and a modest
 solver gradient, but not a dramatic solver separation under the fallback
 search budget.
+
+### End-to-end test with `claude-haiku-4-5` on buggy code
+
+Running the same agent against the intentionally buggy starting point
+produced:
+
+```text
+bug1_skip_connection PASS
+bug2_non_backtracking FAIL (786/9500 backtracking moves)
+bug3_data_refreshes PASS
+bug4_fp16_inference FAIL (CPU run; witness inconclusive)
+bug5_model_dependence PASS
+
+solve_rate 0.562
+mean_optimality 0.579
+mean_solution_length 35.222
+solver_score 0.325
+structural_score 0.180
+final_score 0.282
+```
+
+This run is a useful stress case for the CPU fallback regime: the agent found
+two real implementation bugs (skip wiring and data refresh), but the partial
+repair still scored below the direct buggy baseline on solver performance.
+That is another sign that the local CPU setting is structurally informative
+but solver-noisy, especially when an agent lands in the middle of the repair
+space rather than at either endpoint.
 
 ## Design choices
 

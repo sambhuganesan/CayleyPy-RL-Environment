@@ -108,13 +108,7 @@ def main():
     model.load_state_dict(state, strict=True)
     model.eval()
 
-    # Mixed precision: use float16 only on CUDA
-    if device.type == "cuda":
-        model.half()
-        model.dtype = torch.float16  # used by Pilgrim for one-hot cast
-    else:
-        model.dtype = torch.float32
-
+    model.dtype = torch.float32
     model.to(device)
 
     # Shift for negative labels if needed
