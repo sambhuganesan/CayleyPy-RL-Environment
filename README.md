@@ -309,6 +309,7 @@ inside the agent environment instead of relying on host-only tools.
 End-to-end validation on H100 has not been performed locally. The benchmark
 supports a larger CUDA evaluation regime when GPU is available, but the
 measured calibration data in this README is from CPU-local runs.
+
 Possible improvement: add a small number of recorded GPU validation runs once
 evaluation hardware is available, while keeping CPU-local runs as the
 development path.
@@ -318,6 +319,7 @@ The prompt forbids it, and the witnesses partially constrain the pipeline,
 but a sufficiently devious agent could still attempt to ignore the learned
 heuristic and substitute externally computed solutions. A stronger production
 version would add additional checks.
+
 Possible improvement: add more aggressive solver-integrity checks, such as
 checkpoint perturbation, inference randomization, or tighter runtime tracing
 to verify that the learned heuristic materially affects search behavior.
@@ -329,6 +331,7 @@ Likewise, Witnesses 2 and 3 currently reach the training behavior through the
 `do_random_step` and `generate_random_walks` method names. These witnesses are
 behavioral in intent, but the current implementation still depends on stable
 entry-point names.
+
 Possible improvement: rewrite these witnesses to locate residual blocks and
 training hooks behaviorally or by module traversal rather than by hard-coded
 attribute and method names.
@@ -336,6 +339,7 @@ attribute and method names.
 **The prompt does not disclose the exact bug count.**
 That is intentional, but it means an agent can chase unrelated code smells
 and potentially degrade the pipeline while believing it found extra issues.
+
 Possible improvement: tighten the task instructions so they emphasize
 high-impact paper-vs-code mismatches and discourage speculative cleanup once
 the main discrepancies have been resolved.
