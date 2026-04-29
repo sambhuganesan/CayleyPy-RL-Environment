@@ -22,6 +22,12 @@ STAGE2_NUM_ATTEMPTS = 1
 STAGE2_TRAIN_TIMEOUT = 1200 if torch.cuda.is_available() else 480
 STAGE2_TEST_TIMEOUT = 600
 N_TEST_SCRAMBLES = 16
+N_STRUCTURAL_WITNESSES = 5
+MODEL_DEPENDENCE_TESTS = 4
+MODEL_DEPENDENCE_BEAM_WIDTH_CPU = 1024
+MODEL_DEPENDENCE_BEAM_WIDTH_GPU = 4096
+MODEL_DEPENDENCE_NUM_STEPS_CPU = 50
+MODEL_DEPENDENCE_NUM_STEPS_GPU = 100
 
 
 def _import_from_path(module_name, file_path):
@@ -226,6 +232,153 @@ def witness_fp16_inference(workdir):
         return False, f"witness error: {type(e).__name__}: {e}"
 
 
+def _load_test_results(log_path: Path):
+    results = json.loads(log_path.read_text())
+    solved = [
+        (entry["test_num"], entry["solution_length"])
+        for entry in results
+        if entry.get("solution_length") is not None
+    ]
+    if solved:
+        avg_len = sum(length for _, length in solved) / len(solved)
+    else:
+        avg_len = None
+    return solved, avg_len
+
+
+def _run_inference_subset(workdir, model_id, epoch, beam_width, num_steps, tests_num):
+    test_cmd = [
+        sys.executable, "test.py",
+        "--group_id", "54",
+        "--target_id", "0",
+        "--dataset", "deepcubeahard",
+        "--model_id", str(model_id),
+        "--epoch", str(epoch),
+        "--B", str(beam_width),
+        "--num_attempts", "1",
+        "--num_steps", str(num_steps),
+        "--tests_num", str(tests_num),
+        "--device_id", "0",
+        "--verbose", "0",
+    ]
+    try:
+        r = subprocess.run(
+            test_cmd, cwd=str(workdir),
+            capture_output=True, text=True, timeout=STAGE2_TEST_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "inference timed out", None, None
+
+    if r.returncode != 0:
+        return False, "inference crashed", r.stderr[-500:], None
+
+    log_name = f"test_p054-t000-deepcubeahard_{model_id}_{epoch}_B{beam_width}.json"
+    log_path = workdir / "logs" / log_name
+    if not log_path.exists():
+        return False, f"test log missing: {log_name}", None, None
+
+    solved, avg_len = _load_test_results(log_path)
+    return True, solved, avg_len, log_path
+
+
+def witness_model_dependence(workdir, model_id, epoch):
+    try:
+        if torch.cuda.is_available():
+            beam_width = MODEL_DEPENDENCE_BEAM_WIDTH_GPU
+            num_steps = MODEL_DEPENDENCE_NUM_STEPS_GPU
+        else:
+            beam_width = MODEL_DEPENDENCE_BEAM_WIDTH_CPU
+            num_steps = MODEL_DEPENDENCE_NUM_STEPS_CPU
+
+        ok, real_or_err, real_avg_len, _ = _run_inference_subset(
+            workdir,
+            model_id=model_id,
+            epoch=epoch,
+            beam_width=beam_width,
+            num_steps=num_steps,
+            tests_num=MODEL_DEPENDENCE_TESTS,
+        )
+        if not ok:
+            return False, f"real-model check failed: {real_or_err}"
+
+        real_solved = real_or_err
+        real_count = len(real_solved)
+
+        original_info = workdir / "logs" / f"model_p054-t000_{model_id}.json"
+        original_weights = workdir / "weights" / f"p054-t000_{model_id}_e{epoch:05d}.pth"
+        if not original_info.exists() or not original_weights.exists():
+            return False, "missing trained checkpoint artifacts"
+
+        corrupted_model_id = int(model_id) + 900000000
+        corrupted_info = workdir / "logs" / f"model_p054-t000_{corrupted_model_id}.json"
+        corrupted_weights = workdir / "weights" / f"p054-t000_{corrupted_model_id}_e{epoch:05d}.pth"
+
+        info = json.loads(original_info.read_text())
+        info["model_id"] = corrupted_model_id
+        corrupted_info.write_text(json.dumps(info, indent=4))
+
+        state = torch.load(original_weights, weights_only=False, map_location="cpu")
+        corrupted_state = {}
+        for key, value in state.items():
+            if torch.is_tensor(value):
+                corrupted_state[key] = torch.zeros_like(value)
+            else:
+                corrupted_state[key] = value
+        torch.save(corrupted_state, corrupted_weights)
+
+        try:
+            ok, corrupt_or_err, corrupt_avg_len, _ = _run_inference_subset(
+                workdir,
+                model_id=corrupted_model_id,
+                epoch=epoch,
+                beam_width=beam_width,
+                num_steps=num_steps,
+                tests_num=MODEL_DEPENDENCE_TESTS,
+            )
+            if not ok:
+                return False, f"corrupted-model check failed: {corrupt_or_err}"
+
+            corrupt_solved = corrupt_or_err
+            corrupt_count = len(corrupt_solved)
+
+            if real_count > corrupt_count:
+                return True, (
+                    f"real model solved {real_count}/{MODEL_DEPENDENCE_TESTS}, "
+                    f"corrupted solved {corrupt_count}/{MODEL_DEPENDENCE_TESTS}"
+                )
+
+            if (
+                real_count > 0
+                and corrupt_count > 0
+                and real_avg_len is not None
+                and corrupt_avg_len is not None
+                and real_avg_len + 2.0 <= corrupt_avg_len
+            ):
+                return True, (
+                    f"real and corrupted solved {real_count}/{MODEL_DEPENDENCE_TESTS}, "
+                    f"but corrupted paths were longer ({real_avg_len:.1f} vs {corrupt_avg_len:.1f})"
+                )
+
+            return False, (
+                f"solver showed weak model dependence: real {real_count}/{MODEL_DEPENDENCE_TESTS}"
+                + (
+                    f" at avg length {real_avg_len:.1f}"
+                    if real_avg_len is not None else ""
+                )
+                + ", corrupted "
+                + f"{corrupt_count}/{MODEL_DEPENDENCE_TESTS}"
+                + (
+                    f" at avg length {corrupt_avg_len:.1f}"
+                    if corrupt_avg_len is not None else ""
+                )
+            )
+        finally:
+            corrupted_info.unlink(missing_ok=True)
+            corrupted_weights.unlink(missing_ok=True)
+    except Exception as e:
+        return False, f"witness error: {type(e).__name__}: {e}"
+
+
 def run_solver_stage(workdir, metadata, optimal_lengths):
     try:
         if torch.cuda.is_available():
@@ -320,11 +473,12 @@ def run_solver_stage(workdir, metadata, optimal_lengths):
         metadata["solve_rate"] = f"{solve_rate:.3f}"
         metadata["mean_optimality"] = f"{mean_optimality:.3f}"
         metadata["solved_count"] = f"{len(solved)}/{N_TEST_SCRAMBLES}"
+        metadata["trained_model_id"] = str(model_id)
 
-        return solve_rate * mean_optimality
+        return solve_rate * mean_optimality, int(model_id)
     except Exception as e:
         metadata["solver_error"] = f"unexpected: {type(e).__name__}: {e}"
-        return 0.0
+        return 0.0, None
 
 
 def main(output_path):
@@ -347,6 +501,7 @@ def main(output_path):
         return
 
     structural_score = 0.0
+    witness_credit = 0.30 / N_STRUCTURAL_WITNESSES
     witnesses = [
         ("bug1_skip_connection", witness_skip_connection),
         ("bug2_non_backtracking", witness_non_backtracking),
@@ -357,9 +512,17 @@ def main(output_path):
         passed, info = fn(workdir)
         metadata[name] = ("PASS: " if passed else "FAIL: ") + info
         if passed:
-            structural_score += 0.075
+            structural_score += witness_credit
 
-    solver_score = run_solver_stage(workdir, metadata, optimal_lengths)
+    solver_score, trained_model_id = run_solver_stage(workdir, metadata, optimal_lengths)
+
+    if trained_model_id is not None:
+        passed, info = witness_model_dependence(workdir, trained_model_id, STAGE2_EPOCHS)
+    else:
+        passed, info = False, "solver stage did not produce a trained model"
+    metadata["bug5_model_dependence"] = ("PASS: " if passed else "FAIL: ") + info
+    if passed:
+        structural_score += witness_credit
 
     final_score = 0.3 * structural_score + 0.7 * solver_score
     metadata["structural_score"] = f"{structural_score:.3f}"

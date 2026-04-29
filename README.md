@@ -68,9 +68,10 @@ Final score is:
 
 ### Structural score (30%)
 
-There are four behavioral witnesses, additive at 7.5% each. Each witness
-tests behavior rather than source structure, so refactoring does not produce
-false negatives except where attribute-name stability is explicitly required.
+There are five behavioral witnesses sharing the 30% structural score. Each
+witness tests behavior rather than source structure, so refactoring does not
+produce false negatives except where attribute-name stability is explicitly
+required.
 
 | Witness | Test |
 |---------|------|
@@ -78,6 +79,7 @@ false negatives except where attribute-name stability is explicitly required.
 | Non-backtracking | Instrument `do_random_step` to record `(last_move, next_move)` pairs across walk generation. Assert no pair satisfies `next == inverse_moves[last]`. |
 | Data refreshes | Call `generate_random_walks` twice; at least 99% of states must differ between calls. |
 | fp16 inference | Source inspection on `test.py` for `.half()` or `torch.float16`. Limitation discussed below. |
+| Model dependence | Run inference on a small fixed subset with the trained checkpoint, then rerun after replacing the checkpoint with zeroed weights. The real checkpoint must perform meaningfully better, otherwise the solver may not actually depend on the learned model. |
 
 ### Solver score (70%)
 
@@ -137,6 +139,9 @@ The quantities below mean:
 - `mean_optimality`: average of `optimal_length / solution_length` over solved scrambles
 - `solver_score`: `solve_rate * mean_optimality`
 - `final_score`: `0.3 * structural_score + 0.7 * solver_score`
+
+Note: the calibration figures below were collected before adding the
+model-dependence guardrail and should be rerun for exact final numbers.
 
 ### CPU pilot (4 epochs, beam width 1024, 4 scrambles)
 
