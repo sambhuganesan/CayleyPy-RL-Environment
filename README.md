@@ -12,8 +12,10 @@ The agent receives:
 - A complete CayleyPy implementation: `pilgrim/`, `train.py`, `test.py`
 - The CayleyPy paper PDF: `paper/cayleypy.pdf`
 - Cube generators, target state, and 16 evaluation scrambles
-- A description of the observed performance gap: about 12/16 solved at
-  average length about 38, versus the paper's near-100% at about length 20
+- A prompt-level summary of the current local performance gap: under the
+  reduced CPU-local setting, the buggy implementation solves about 15/16
+  scrambles with mean solution length about 34, still below the paper's much
+  stronger reported results
 
 Four bugs are injected into the implementation. The agent must locate and
 fix them by reading the paper, inspecting the code, and verifying fixes
@@ -68,10 +70,11 @@ Final score is:
 
 ### Structural score (30%)
 
-There are five behavioral witnesses sharing the 30% structural score. Each
-witness tests behavior rather than source structure, so refactoring does not
-produce false negatives except where attribute-name stability is explicitly
-required.
+There are five witnesses sharing the 30% structural score. Four are primarily
+behavioral, while the fp16 witness is a lightweight source-level check because
+CUDA fp16 inference is not meaningfully testable in the local CPU regime. This
+means most refactors are judged by behavior rather than exact source layout,
+with explicit exceptions called out below.
 
 | Witness | Test |
 |---------|------|
@@ -92,7 +95,7 @@ solve_rate * mean_optimality
 over the 16 DeepCubeA-hard scrambles.
 
 - `solve_rate`: fraction solved within the beam-search step limit
-- `mean_optimality`: mean of `optimal_length / agent_length` over solved
+- `mean_optimality`: mean of `optimal_length / solution_length` over solved
   scrambles
 
 The two factors multiply because they capture orthogonal failure modes:
@@ -141,10 +144,7 @@ The quantities below mean:
 - `final_score`: `0.3 * structural_score + 0.7 * solver_score`
 
 Training and inference entry points now seed Torch and Python `random` at
-startup so repeated local CPU judge runs are stable. Some older calibration
-figures below were collected before the final deterministic-seeding and
-model-dependence updates and should be rerun for exact like-for-like
-comparison.
+startup so repeated local CPU judge runs are stable.
 
 ### Full Stage 2 against buggy code
 
@@ -267,15 +267,32 @@ Additive structural rewards partial diagnosis. Multiplicative solver score
 ensures solve rate and optimality both matter because they reflect distinct
 failure modes.
 
-**Behavioral witnesses, not source inspection.**
-The first three witnesses test what the code does, not what it looks like.
-An agent can refactor substantially and still receive credit as long as the
-behavior is correct. The main exception is Witness 4, discussed below.
+**Witnesses favor behavior over source inspection.**
+The first four witnesses are there to catch the planted implementation bugs,
+and the fifth witness (`bug5_model_dependence`) is a guardrail against a
+different failure mode: an agent preserving the outward training pipeline
+while silently replacing inference with a non-ML or classical-solver path.
+Witnesses 1, 2, and 3 are primarily behavioral in what they test, but the
+current judge still reaches them through specific attribute or method names.
+That means the benchmark favors behavioral validation over raw source
+inspection, without being completely refactor-agnostic yet. Witness 4 is
+lighter-weight because fp16 is difficult to validate behaviorally in the local
+CPU regime, and Witness 5 deliberately tests model dependence rather than a
+specific code pattern so that solver integrity is checked even if the broader
+implementation is reorganized.
 
 **Pinned configuration.**
 The prompt directs the agent to use the lightweight reference configuration
-rather than the paper's larger Table II variants. This keeps the task scoped
-to implementation review rather than hyperparameter search.
+rather than the paper's larger Table II variants. This is intentional: the
+paper's full configurations are too large and slow for a self-contained local
+benchmark, especially when the environment must also support CPU development.
+Instead of reproducing the full paper-scale training recipe, this task uses a
+smaller public implementation layout derived from the authors' online code and
+pins the benchmark to `hd1=1024`, `hd2=256`, and `nrd=1`. That keeps the core
+algorithmic structure the same while making the task runnable in a normal repo
+workflow. The design goal is to test implementation review against the paper's
+semantics, not to ask the agent to rediscover or brute-force the paper's
+largest hyperparameter settings.
 
 **No `setup_data.py`.**
 The relevant data files are small enough to commit directly. This avoids
@@ -292,20 +309,36 @@ inside the agent environment instead of relying on host-only tools.
 End-to-end validation on H100 has not been performed locally. The benchmark
 supports a larger CUDA evaluation regime when GPU is available, but the
 measured calibration data in this README is from CPU-local runs.
+Possible improvement: add a small number of recorded GPU validation runs once
+evaluation hardware is available, while keeping CPU-local runs as the
+development path.
 
 **Classical-solver reward hacking is mitigated, not perfectly prevented.**
 The prompt forbids it, and the witnesses partially constrain the pipeline,
 but a sufficiently devious agent could still attempt to ignore the learned
 heuristic and substitute externally computed solutions. A stronger production
 version would add additional checks.
+Possible improvement: add more aggressive solver-integrity checks, such as
+checkpoint perturbation, inference randomization, or tighter runtime tracing
+to verify that the learned heuristic materially affects search behavior.
 
-**Attribute name stability is required.**
+**Some attribute and method name stability is required.**
 The prompt tells the agent not to rename key attributes in
 `pilgrim/model.py`, because Witness 1 refers to these attributes directly.
+Likewise, Witnesses 2 and 3 currently reach the training behavior through the
+`do_random_step` and `generate_random_walks` method names. These witnesses are
+behavioral in intent, but the current implementation still depends on stable
+entry-point names.
+Possible improvement: rewrite these witnesses to locate residual blocks and
+training hooks behaviorally or by module traversal rather than by hard-coded
+attribute and method names.
 
 **The prompt does not disclose the exact bug count.**
 That is intentional, but it means an agent can chase unrelated code smells
 and potentially degrade the pipeline while believing it found extra issues.
+Possible improvement: tighten the task instructions so they emphasize
+high-impact paper-vs-code mismatches and discourage speculative cleanup once
+the main discrepancies have been resolved.
 
 ## Repository structure
 
@@ -338,6 +371,14 @@ and potentially degrade the pipeline while believing it found extra issues.
 uv sync
 ```
 
+If you want to run `pdftotext` directly on the host while debugging, install
+Poppler there as well:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y poppler-utils
+```
+
 Install a container runtime:
 - Podman
 - Docker
@@ -357,11 +398,15 @@ uv run pm_env create-run-config run_config.json \
 
 Then make sure `run_config.json` points to:
 
-```text
-task_id = "cayleypy-implementation-review"
+```json
+{
+  "task_id": "cayleypy-implementation-review"
+}
 ```
 
 ### Run end to end
+
+With Docker:
 
 ```bash
 uv run pm_env run --config run_config.json --runtime docker
@@ -370,7 +415,17 @@ uv run pm_env run --config run_config.json --runtime docker
 The first run rebuilds the container with PyTorch and `poppler-utils`
 installed. Subsequent runs use cached layers when possible.
 
+With Podman:
+
+```bash
+uv run pm_env run --config run_config.json --runtime podman
+```
+
 ### Verify PDF extraction manually
+
+The benchmark container already includes `pdftotext`. The commands below are
+for host-side verification and therefore require `poppler-utils` on the host
+machine too.
 
 ```bash
 cd env_data/cayleypy_review
@@ -405,6 +460,10 @@ with open('out/transcript_readable.txt', 'w') as f:
                         tc = b.get('content', '')
                         if isinstance(tc, str):
                             f.write(f'\n\n=== TOOL RESULT ===\n{tc[:2000]}\n')
+                        elif isinstance(tc, list):
+                            for item in tc:
+                                if item.get('type') == 'text':
+                                    f.write(f'\n\n=== TOOL RESULT ===\n{item.get(\"text\", \"\")[:2000]}\n')
 "
 ```
 

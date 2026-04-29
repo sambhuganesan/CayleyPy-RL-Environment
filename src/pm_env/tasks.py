@@ -21,10 +21,11 @@ def get_tasks(config: EvaluationRunConfig) -> list[Task]:
                     3x3x3 Rubik's cube. The pipeline trains a ResMLP to predict diffusion distance
                     and uses beam search guided by these predictions to find solution sequences.
 
-                    The pipeline runs without errors and trains to convergence, but on the 16
-                    held-out DeepCubeA-hard scrambles it solves only ~12/16 within the beam search
-                    step limit, with average solution length ~38. The CayleyPy paper reports near-
-                    100% solve rate with optimal lengths around 20 on this configuration.
+                    The pipeline runs without errors and trains to convergence, but under the
+                    reduced local CPU fallback setting it solves only about 15/16 of the 16
+                    held-out DeepCubeA-hard scrambles, with mean solution length about 34. The
+                    CayleyPy paper reports substantially stronger results, with near-100% solve
+                    rate and much shorter solutions on this problem.
 
                     Your task is to identify why the implementation underperforms and fix it. The
                     issues may arise from architecture, data generation, or inference setup.
