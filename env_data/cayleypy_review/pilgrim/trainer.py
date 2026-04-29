@@ -38,14 +38,15 @@ class Trainer:
         os.makedirs(self.weights_dir, exist_ok=True)
 
     def do_random_step(self, states, last_moves):
-        """Perform a random step."""
-        next_moves = torch.randint(0, self.n_gens, (states.size(0),), device=self.device)
+        """Perform a random step while avoiding inverse moves."""
+        possible_moves = torch.ones((states.size(0), self.n_gens), dtype=torch.bool, device=self.device)
+        possible_moves[torch.arange(states.size(0)), self.inverse_moves[last_moves]] = False
+        next_moves = torch.multinomial(possible_moves.float(), 1).squeeze()
         new_states = torch.gather(states, 1, self.all_moves[next_moves])
         return new_states, next_moves
 
     def generate_random_walks(self, k=1000, K_min=1, K_max=30):
         """Random walks from K_min to K_max steps with k walkers."""
-        torch.manual_seed(42)
         total = k * (K_max - K_min + 1)
         Y = torch.arange(K_min, K_max + 1, device=self.device).repeat_interleave(k)
         states = self.V0.repeat(total, 1)

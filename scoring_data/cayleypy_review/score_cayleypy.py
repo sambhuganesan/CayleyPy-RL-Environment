@@ -462,7 +462,9 @@ def run_solver_stage(workdir, metadata, optimal_lengths):
 
         if not solved:
             mean_optimality = 0.0
+            mean_solution_length = 0.0
         else:
+            mean_solution_length = sum(agent_len for _, agent_len in solved) / len(solved)
             ratios = [
                 optimal_lengths[idx] / agent_len
                 for idx, agent_len in solved
@@ -472,6 +474,7 @@ def run_solver_stage(workdir, metadata, optimal_lengths):
 
         metadata["solve_rate"] = f"{solve_rate:.3f}"
         metadata["mean_optimality"] = f"{mean_optimality:.3f}"
+        metadata["mean_solution_length"] = f"{mean_solution_length:.3f}"
         metadata["solved_count"] = f"{len(solved)}/{N_TEST_SCRAMBLES}"
         metadata["trained_model_id"] = str(model_id)
 

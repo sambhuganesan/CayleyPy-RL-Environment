@@ -17,10 +17,10 @@ class ResidualBlock(nn.Module):
         out = self.fc1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        out = out + residual
         out = self.dropout(out)
         out = self.fc2(out)
         out = self.bn2(out)
+        out = out + residual
         out = self.relu(out)
         return out
 

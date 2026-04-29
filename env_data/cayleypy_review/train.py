@@ -1,6 +1,7 @@
 import argparse
 import os
 import json
+import random
 import torch
 from pilgrim import Trainer, Pilgrim
 from pilgrim import count_parameters, generate_inverse_moves, load_cube_data  # assuming these exist in your module
@@ -14,6 +15,11 @@ def save_model_id(model_id):
         f.write(f"{model_id}\n")
 
 def main():
+    torch.manual_seed(0)
+    random.seed(0)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(0)
+
     # Argument parser
     parser = argparse.ArgumentParser(description="Train Pilgrim Model")
 

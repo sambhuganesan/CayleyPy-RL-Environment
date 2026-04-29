@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import random
 import time
 import torch
 from pilgrim import Pilgrim, Searcher
@@ -20,6 +21,11 @@ def parse_skip_list(s):
         return None
 
 def main():
+    torch.manual_seed(0)
+    random.seed(0)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(0)
+
     parser = argparse.ArgumentParser(description="Test Pilgrim Model")
     parser.add_argument("--group_id", type=int, required=True, help="Group ID.")
     parser.add_argument("--target_id", type=int, default=0, help="Target ID.")
@@ -102,7 +108,13 @@ def main():
     model.load_state_dict(state, strict=True)
     model.eval()
 
-    model.dtype = torch.float32
+    # Mixed precision: use float16 only on CUDA
+    if device.type == "cuda":
+        model.half()
+        model.dtype = torch.float16  # used by Pilgrim for one-hot cast
+    else:
+        model.dtype = torch.float32
+
     model.to(device)
 
     # Shift for negative labels if needed

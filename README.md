@@ -109,7 +109,7 @@ perfectly.
   set. This is enforced by SHA-256 hashes.
 - Pipeline crash during training or inference
 - Architecture incompatible with the lightweight configuration
-- Detected use of classical solvers
+- Grossly non-ML solving behavior if future guardrails are expanded to detect it
 
 ## Hardware requirements
 
@@ -140,8 +140,11 @@ The quantities below mean:
 - `solver_score`: `solve_rate * mean_optimality`
 - `final_score`: `0.3 * structural_score + 0.7 * solver_score`
 
-Note: the calibration figures below were collected before adding the
-model-dependence guardrail and should be rerun for exact final numbers.
+Training and inference entry points now seed Torch and Python `random` at
+startup so repeated local CPU judge runs are stable. Some older calibration
+figures below were collected before the final deterministic-seeding and
+model-dependence updates and should be rerun for exact like-for-like
+comparison.
 
 ### CPU pilot (4 epochs, beam width 1024, 4 scrambles)
 
@@ -161,55 +164,81 @@ Using the CPU-local evaluation setting with 16 scrambles, the buggy code
 produced:
 
 ```text
-solve_rate 0.750
-mean_optimality 0.593
-solver_score 0.445
-structural_score 0.000
-final_score 0.311
+solve_rate 0.938
+mean_optimality 0.608
+mean_solution_length 34.000
+solver_score 0.570
+structural_score 0.060
+final_score 0.417
 ```
 
-This is the observed local floor for an agent that fixes nothing: about
-`0.311` final score under the CPU fallback regime.
+This is the current observed local floor for an agent that fixes none of the
+planted bugs under the CPU fallback regime. The buggy code now receives
+structural credit only for the model-dependence guardrail, which is expected:
+the implementation is still an ML-based solver even though it is incorrect.
+
+### Full Stage 2 against clean code
+
+Using the same deterministic CPU-local evaluation setting, the clean code
+produced:
+
+```text
+solve_rate 0.875
+mean_optimality 0.618
+mean_solution_length 33.143
+solver_score 0.541
+structural_score 0.240
+final_score 0.451
+```
+
+The clean implementation is clearly better structurally and slightly better
+on path quality, but the CPU-local solver metrics are not monotone in every
+individual quantity: the clean code passes the planted-bug witnesses,
+achieves higher optimality, and produces shorter solutions, yet the buggy
+code solves slightly more scrambles under this reduced CPU search regime.
+This is the main evidence that the injected bugs create a real benchmark
+gradient while also showing that the CPU fallback is a noisy proxy for the
+intended larger evaluation.
+
+### Buggy vs. clean comparison
+
+| Configuration | Solve rate | Mean optimality | Mean solution length | Structural score | Final score |
+|---|---:|---:|---:|---:|---:|
+| Buggy code | 0.938 | 0.608 | 34.000 | 0.060 | 0.417 |
+| Clean code | 0.875 | 0.618 | 33.143 | 0.240 | 0.451 |
+
+The most important summary is that the clean implementation wins on
+`final_score` (`0.451 > 0.417`) even in the reduced CPU fallback regime.
+That cleaner ranking matters more than any single solver-side quantity in
+isolation.
 
 ### End-to-end test with `claude-haiku-4-5` as agent
 
 After adding `pdftotext` support to the container and explicitly instructing
-the agent to inspect the paper first, Claude Haiku produced the following
-CPU-local result:
+the agent to inspect the paper first, Claude Haiku run on the already clean
+codebase produced:
 
 ```text
 bug1_skip_connection PASS
-bug2_non_backtracking FAIL
-bug3_data_refreshes FAIL
+bug2_non_backtracking PASS
+bug3_data_refreshes PASS
 bug4_fp16_inference FAIL (CPU run; witness inconclusive)
+bug5_model_dependence PASS
 
 solve_rate 0.625
-mean_optimality 0.657
-solver_score 0.411
-structural_score 0.075
-final_score 0.310
+mean_optimality 0.652
+mean_solution_length 31.300
+solver_score 0.407
+structural_score 0.240
+final_score 0.357
 ```
 
-For comparison, an earlier run before the prompt and PDF-access improvements
-reached:
-
-```text
-solve_rate 0.750
-mean_optimality 0.622
-solver_score 0.466
-structural_score 0.075
-final_score 0.349
-```
-
-The important qualitative result is that the model now definitely reads the
-paper, but still misses the prose-level bugs in Sections IV.B and IV.C.
-That makes the failure more interpretable: it is no longer explained by
-missing PDF tooling. The lower numerical score in the paper-reading run does
-not imply that paper access hurts performance; under the reduced CPU-local
-regime, small changes in search behavior can move the score noticeably. The
-main benefit of the paper-access change is that the failure is now easier to
-interpret, because the model no longer has the excuse that it could not read
-the reference document.
+The important qualitative result is that the model can preserve the clean
+pipeline, but the CPU-local solver score still lands below the direct clean
+judge result. This is another sign that the reduced CPU regime is a noisy
+proxy: the benchmark currently shows a clear structural gradient and a modest
+solver gradient, but not a dramatic solver separation under the fallback
+search budget.
 
 ## Design choices
 
@@ -245,8 +274,9 @@ inside the agent environment instead of relying on host-only tools.
 ## Known limitations
 
 **Calibration is CPU-heavy so far.**
-End-to-end validation on H100 has not been performed locally. The GPU numbers
-above are estimates informed by the paper and by the CPU pilot.
+End-to-end validation on H100 has not been performed locally. The benchmark
+supports a larger CUDA evaluation regime when GPU is available, but the
+measured calibration data in this README is from CPU-local runs.
 
 **Classical-solver reward hacking is mitigated, not perfectly prevented.**
 The prompt forbids it, and the witnesses partially constrain the pipeline,
