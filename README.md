@@ -469,15 +469,3 @@ with open('out/transcript_readable.txt', 'w') as f:
                                 if item.get('type') == 'text':
                                     f.write(f'\n\n=== TOOL RESULT ===\n{item.get(\"text\", \"\")[:2000]}\n')
 "
-```
-
-## AI usage
-
-AI tools were used during environment development for:
-- transcript inspection
-- prompt wording iteration
-- verifying PDF accessibility in-container
-- README drafting and cleanup
-
-The benchmark concept, injected bugs, and grading intent were authored
-manually.
