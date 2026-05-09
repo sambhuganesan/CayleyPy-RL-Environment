@@ -436,36 +436,3 @@ cd env_data/cayleypy_review
 pdftotext -layout paper/cayleypy.pdf - | head -40
 pdftotext -layout paper/cayleypy.pdf paper_text.txt
 wc -l paper_text.txt
-```
-
-### Transcripts
-
-Transcripts are written to `out/transcript.json` by default. To extract a
-more readable text version:
-
-```bash
-python -c "
-import json
-events = json.load(open('out/transcript.json'))['events']
-with open('out/transcript_readable.txt', 'w') as f:
-    for e in events:
-        if e['type'] == 'message_added':
-            msg = e['message']
-            content = msg.get('content', '')
-            if isinstance(content, str):
-                f.write(f'\n\n=== {msg[\"role\"].upper()} ===\n{content}\n')
-            elif isinstance(content, list):
-                for b in content:
-                    if b.get('type') == 'text':
-                        f.write(f'\n\n=== {msg[\"role\"].upper()} ===\n{b[\"text\"]}\n')
-                    elif b.get('type') == 'tool_use':
-                        f.write(f'\n\n=== TOOL USE: {b[\"name\"]} ===\n{json.dumps(b.get(\"input\", {}))[:1500]}\n')
-                    elif b.get('type') == 'tool_result':
-                        tc = b.get('content', '')
-                        if isinstance(tc, str):
-                            f.write(f'\n\n=== TOOL RESULT ===\n{tc[:2000]}\n')
-                        elif isinstance(tc, list):
-                            for item in tc:
-                                if item.get('type') == 'text':
-                                    f.write(f'\n\n=== TOOL RESULT ===\n{item.get(\"text\", \"\")[:2000]}\n')
-"
