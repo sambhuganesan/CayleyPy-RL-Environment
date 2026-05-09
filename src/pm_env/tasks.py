@@ -13,7 +13,7 @@ def get_tasks(config: EvaluationRunConfig) -> list[Task]:
         Task(
             id="cayleypy-implementation-review",
             tools=["bash", "submit_answers"],
-            required_hardware="h100",
+            required_hardware="t4",
             steps=[
                 Step(
                     instructions=dedent(f"""
